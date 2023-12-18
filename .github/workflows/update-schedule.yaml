@@ -1,0 +1,107 @@
+name: Scheduled Update
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  push:
+    paths-ignore:
+      - "**.md"
+      - "**.yaml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  do-stuff-pretty-please:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check versions
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          EXT_FEATHER=$(curl --silent "https://api.github.com/repos/feather-wallet/feather/tags" | grep '"name":' | grep -Eo "[0-9]{1,2}.[0-9]{1,2}.[0-9]{1,2}" | sort -r | head -n1)
+          if [ -z "${EXT_FEATHER}" ]; then
+            echo "**** Can't retrieve external release of Feather, exiting ****"
+            exit 1
+          fi
+          EXT_ELECTRUM=$(curl --silent "https://api.github.com/repos/spesmilo/electrum/tags" | grep '"name":' | grep -Eo "[0-9]{1,2}.[0-9]{1,2}.[0-9]{1,2}" | sort -r | head -n1)
+          if [ -z "${EXT_ELECTRUM}" ]; then
+            echo "**** Can't retrieve external release of Electrum, exiting ****"
+            exit 1
+          fi
+          IMAGE_FEATHER=$(cat Dockerfile | grep 'FEATHERVERSION=' | sed -E 's/.*=([^"]+).*/\1/');
+          if [ -z "${IMAGE_FEATHER}" ]; then
+            echo "**** Can't retrieve latest pushed version of Feather, exiting ****"
+            exit 1
+          fi
+          IMAGE_ELECTRUM=$(cat Dockerfile | grep 'ELECTRUMVERSION=' | sed -E 's/.*=([^"]+).*/\1/');
+          if [ -z "${IMAGE_ELECTRUM}" ]; then
+            echo "**** Can't retrieve latest pushed version of Electrum, exiting ****"
+            exit 1
+          fi
+          if [ "${EXT_FEATHER}" == "${IMAGE_FEATHER}" ] && [ "${EXT_ELECTRUM}" == "${IMAGE_ELECTRUM}" ]; then
+            echo "**** Latest version of Feather ${EXT_FEATHER} and Electrum ${EXT_ELECTRUM} already pushed, exiting ****"
+            exit 0
+          fi
+          if [ "${EXT_FEATHER}" != "${IMAGE_FEATHER}" ]; then
+            if wget -q --method=HEAD https://featherwallet.org/files/releases/linux/feather-$EXT_FEATHER-linux.zip; then
+              echo "**** New version ${EXT_FEATHER} of Feather found, old ${IMAGE_FEATHER} ****"
+              sed -i "s/FEATHERVERSION=${IMAGE_FEATHER}/FEATHERVERSION=${EXT_FEATHER}/g" Dockerfile
+              echo "update=true" >> "$GITHUB_OUTPUT"
+              echo "feather=${EXT_FEATHER}" >> "$GITHUB_OUTPUT"
+            else
+              echo "**** New version ${EXT_FEATHER} of Feather found; URL invalid ****"
+              echo "feather=${IMAGE_FEATHER}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "feather=${IMAGE_FEATHER}" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${EXT_ELECTRUM}" != "${IMAGE_ELECTRUM}" ]; then
+            if wget -q --method=HEAD https://download.electrum.org/$EXT_ELECTRUM/Electrum-$EXT_ELECTRUM.tar.gz; then
+              echo "**** New version ${EXT_ELECTRUM} of Electrum found, old ${IMAGE_ELECTRUM} ****"
+              sed -i "s/ELECTRUMVERSION=${IMAGE_ELECTRUM}/ELECTRUMVERSION=${EXT_ELECTRUM}/g" Dockerfile
+              echo "update=true" >> "$GITHUB_OUTPUT"
+              echo "electrum=${EXT_ELECTRUM}" >> "$GITHUB_OUTPUT"
+            else
+              echo "**** New version ${EXT_ELECTRUM} of Electrum found; URL invalid ****"
+              echo "electrum=${IMAGE_ELECTRUM}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "electrum=${IMAGE_ELECTRUM}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit Update
+        id: commit
+        if: 'steps.check.outputs.update'
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .
+          git commit -m "Feather ${{ steps.check.outputs.feather }}, Electrum ${{ steps.check.outputs.electrum }}"
+          git push
+
+      - name: Login to image repository
+        id: login
+        if: 'steps.check.outputs.update'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        id: push
+        if: 'steps.check.outputs.update'
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ secrets.REGISTRY_USER }}/cryptowallets-docker:latest
+          labels: |
+            maintainer=${{ secrets.REGISTRY_USER }}
+            org.opencontainers.image.source https://github.com/${{ secrets.REGISTRY_USER }}/cryptowallets-docker
