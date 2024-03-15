@@ -3,8 +3,8 @@ FROM ghcr.io/linuxserver/baseimage-kasmvnc:ubuntujammy
 LABEL maintainer="lanjelin"
 
 ENV TITLE=CryptoWallets
-ENV FEATHERVERSION=2.6.4
-ENV ELECTRUMVERSION=4.5.3
+ENV FEATHERVERSION=2.6.5
+ENV ELECTRUMVERSION=4.5.4
 
 RUN \
   sed -i 's|</applications>|  <application title="CryptoWallets" type="normal">\n    <maximized>no</maximized>\n  </application>\n</applications>|' /etc/xdg/openbox/rc.xml && \
