@@ -3,7 +3,7 @@ FROM ghcr.io/linuxserver/baseimage-kasmvnc:ubuntujammy
 LABEL maintainer="lanjelin"
 
 ENV TITLE=CryptoWallets
-ENV FEATHERVERSION=2.8.0
+ENV FEATHERVERSION=2.8.1
 ENV ELECTRUMVERSION=4.5.8
 
 RUN \
