@@ -4,7 +4,7 @@ LABEL maintainer="lanjelin"
 
 ENV TITLE=CryptoWallets
 ENV FEATHERVERSION=2.8.1
-ENV ELECTRUMVERSION=4.6.1
+ENV ELECTRUMVERSION=4.6.2
 
 RUN \
   sed -i 's|</applications>|  <application title="CryptoWallets" type="normal">\n    <maximized>no</maximized>\n  </application>\n</applications>|' /etc/xdg/openbox/rc.xml && \
